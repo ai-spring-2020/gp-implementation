@@ -1,12 +1,25 @@
 """
-Day 1 projects
-Based on your card, you will implement one of these:
+GP Implementation
+Pair programming activity
 
-Ace (or 9) - initialize_individual
-King (or 8) - make_test_cases function and Individual's evaluate_individual method.
-Queen - tournament_selection
-Jack - mutation
-10 - crossover
+The first thing you should do is read/skim through the given code. Pay special
+attention to these parts:
+- The main function - go through it and run the code to see how to create
+  and run programs and individuals.
+- The FunctionNode and TerminalNode classes make up program trees, but you can
+  largely ignore their contents.
+- The Individual class is really important, make note of its methods and attributes.
+
+
+Based on the letter I assign you, you will work on one of these:
+A - initialize_individual
+B - make_test_cases function and Individual's evaluate_individual method.
+C - tournament_selection
+D - mutation
+E - crossover
+
+If you finish you assigned programming task before the end of class, work on
+the next one, wrapping around if necessary.
 """
 
 import operator, random, math, copy
@@ -258,7 +271,8 @@ def make_test_cases():
     element is a dictionary containing the x and y assignments, and the second
     element is the correct output.
 
-    You should pick a function f(x, y) = something, and hard-code the correct
+    You should pick a function f(x, y) = something
+    (for example, f(x,y) = x^2 + sin(log(3y))), and hard-code the correct
     outputs for that function. You should have somewhere between 50 and 200 test
     cases."""
 
@@ -292,8 +306,8 @@ def main():
 
     assignments = {"x": 7.0, "y": 9.0}
 
-    print("prog1({}) =".format(assignments), prog1.eval(assignments))
-    print("prog2({}) =".format(assignments), prog2.eval(assignments))
+    print("prog1({}) = {}".format(assignments, prog1.eval(assignments)))
+    print("prog2({}) = {}".format(assignments, prog2.eval(assignments)))
 
     print("\n--------- Making individuals ----------")
 
