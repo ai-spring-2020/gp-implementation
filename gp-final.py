@@ -23,6 +23,8 @@ the next one, wrapping around if necessary.
 """
 
 import operator, random, math, copy
+from typing import Union
+import numpy as np
 
 MAX_FLOAT = 1e12
 
@@ -165,7 +167,19 @@ class Individual:
         This function should set the individual's errors (to be a list of errors
         on the test cases) and total_error to be the sum of errors."""
 
-        pass
+        # Inititalize self.errors list and self.total_error
+        self.errors = []
+        self.total_error = 0
+        # Check every test case
+        for case in test_cases:
+            input, correct_output = case
+            # Evaluate the program on the given input
+            program_output = self.program.eval(input)
+            # Calculate the error
+            error = abs(correct_output - program_output)
+            # Add it to the list of errors and total_error
+            self.errors.append(error)
+            self.total_error += error
 
     def is_solution(self):
         """Returns True if total_error is less than THRESHOLD."""
@@ -189,14 +203,66 @@ def random_terminal():
 
     return TerminalNode(terminal_value)
 
-def initialize_individual():
+Program = Union[FunctionNode, TerminalNode]
+
+
+def full(max_depth: int) -> Program:
+    """
+    Generates a Program (Union[FunctionNode, TerminalNode]) using the full generation algorithm
+    :param max_depth: The max tree depth
+    :rtype: Union[FunctionNode, TerminalNode]
+    :return: A program that can be used for an Individual
+    """
+
+    if max_depth == 0:
+        return random_terminal()
+
+    random_func_symbol = random.choice(FUNCTIONS)
+    num_children = FUNCTION_ARITIES[random_func_symbol]
+
+    children = [full(max_depth - 1) for _ in range(num_children)]
+    function = FunctionNode(random_func_symbol, children)
+
+    return function
+
+
+def grow(max_depth: int, terminal_ratio=0.1) -> Program:
+    """
+    Generates a Program (Union[FunctionNode, TerminalNode]) using the grow generation algorithm
+    :param max_depth: The max tree depth
+    :param terminal_ratio: The probability that a terminal will be generated [0, 1]
+    :rtype: Union[FunctionNode, TerminalNode]
+    :return: A program that can be used for an Individual
+    """
+
+    pick_terminal = random.random() < terminal_ratio
+    if max_depth == 0 or pick_terminal:
+        return random_terminal()
+
+    random_func_symbol = random.choice(FUNCTIONS)
+    num_children = FUNCTION_ARITIES[random_func_symbol]
+
+    children = [grow(max_depth - 1) for _ in range(num_children)]
+    function = FunctionNode(random_func_symbol, children)
+
+    return function
+
+
+def initialize_individual() -> Individual:
     """Creates a new individual from scratch using ramped-half-and-half. This means
     you'll need to create full and grow functions. I recommend having max depth
     set in the range [2, 5] inclusive.
 
     You will want to use the random_terminal function above."""
 
-    pass
+    max_depth_range = range(2, 5 + 1)
+    max_depth = random.choice(max_depth_range)
+
+    func_list = [full, grow]
+    gen_func = random.choice(func_list)
+
+    return Individual(gen_func(max_depth))
+
 
 def subtree_at_index(node, index):
     """Returns subtree at particular index in this tree. Traverses tree in
@@ -250,21 +316,50 @@ def mutation(parent):
     with depth in that range. Since you don't have this function yet, you should
     test your code with a hard-coded subtree to add to the parent."""
 
-    pass
+    # This program represents (+ (* x 5.0) y)
+    # subtree = FunctionNode("+",
+    #             [FunctionNode("*",
+    #                [TerminalNode("x"),
+    #                 TerminalNode(5.0)]),
+    #              TerminalNode("y")])
+
+    # When initialize individual is implemented...
+    subtree = initialize_individual().program
+
+    index = random.randint(0,parent.program.size_of_subtree()-1)
+
+    return replace_subtree_at_index(parent.program,index,subtree)
 
 def crossover(parent1, parent2):
     """Crosses over two parents (individuals) to create a child program. You
     should make use of subtree_at_index and replace_subtree_at_index above, as well
     as the nodes method of Individual."""
 
-    pass
+    size1 = parent1.nodes()
+    size2 = parent2.nodes()
+
+    subtree_index_1 = random.randint(0,size1-1)
+    subtree_index_2 = random.randint(0,size2-1)
+
+    subtree_1 = copy.deepcopy(subtree_at_index(parent1.program,subtree_index_1))
+    new_tree = replace_subtree_at_index(parent2.program,subtree_index_2,subtree_1)
+
+    return new_tree
 
 
 def tournament_selection(population, tournament_size):
     """Selects an individual from the population using tournament selection
     with given tournament size."""
+    tournement = random.sample(population, tournament_size)
+    best = None
+    for player in tournement:
+        # if best is None or best is WORSE than the player:
+        if not best or best.total_error > player.total_error:
+            best = player
+    return best
 
-    pass
+def func(x, y):
+    return safe_exp(x) + np.sin(y)
 
 def make_test_cases():
     """Makes a list of test cases. Each test case is a tuple where the first
@@ -276,50 +371,130 @@ def make_test_cases():
     outputs for that function. You should have somewhere between 50 and 200 test
     cases."""
 
-    pass
+    test_cases = []
+    for x in range(-10, 10):
+        for y in np.arange(0, 2*np.pi, np.pi/4):
+            cur_case = ({'x': x, 'y': y}, func(x, y))
+            test_cases.append(cur_case)
+
+    return test_cases
+
+def gp():
+    """Main controller of the GP run.
+    Returns a solution if one is found."""
+
+    test_cases = make_test_cases()
+
+    population = [initialize_individual() for _ in range(POPULATION_SIZE)]
+
+    for generation in range(MAX_GENERATIONS):
+
+        best_ind = population[0]
+
+        # Evaluate each member of the population.
+        for ind in population:
+            ind.evaluate_individual(test_cases)
+
+            # Check for a solution
+            if ind.total_error < THRESHOLD:
+                return ind
+
+            if ind.total_error < best_ind.total_error:
+                best_ind = ind
+
+        # Report on best individual
+        print()
+        print("Generation:", generation)
+        print(best_ind)
+
+        # Create child population
+        old_population = population
+        population = []
+
+        for _ in range(POPULATION_SIZE):
+
+            # Use 50% mutation and 50% crossover
+
+            if random.random() < 0.5:
+                parent = tournament_selection(old_population, TOURNAMENT_SIZE)
+                child = mutation(parent)
+            else:
+                parent1 = tournament_selection(old_population, TOURNAMENT_SIZE)
+                parent2 = tournament_selection(old_population, TOURNAMENT_SIZE)
+                child = crossover(parent1, parent2)
+
+            population.append(Individual(child))
+
+    return best_ind
+
+
 
 
 
 def main():
 
     # This program represents (+ (* x 5.0) y)
-    prog1 = FunctionNode("+",
-                [FunctionNode("*",
-                   [TerminalNode("x"),
-                    TerminalNode(5.0)]),
-                 TerminalNode("y")])
+    # prog1 = FunctionNode("+",
+    #             [FunctionNode("*",
+    #                [TerminalNode("x"),
+    #                 TerminalNode(5.0)]),
+    #              TerminalNode("y")])
+    #
+    # # This program represents (- (sin (/ 1.0 2.0)) (exp y))
+    # prog2 = FunctionNode("-",
+    #             [FunctionNode("sin",
+    #                 [FunctionNode("/",
+    #                     [TerminalNode(1.0),
+    #                      TerminalNode(2.0)])
+    #                 ]),
+    #              FunctionNode("exp",
+    #                 [TerminalNode("y")])
+    #                 ])
+    #
+    # print("prog1:", prog1)
+    # print("Depth:", prog1.tree_depth())
+    # print()
+    #
+    # assignments = {"x": 7.0, "y": 9.0}
+    #
+    # print("prog1({}) = {}".format(assignments, prog1.eval(assignments)))
+    # print("prog2({}) = {}".format(assignments, prog2.eval(assignments)))
+    #
+    # print("\n--------- Making individuals ----------")
+    #
+    # ind1 = Individual(prog1)
+    # print(ind1)
+    # print()
+    #
+    # ind2 = Individual(prog2)
+    # print(ind2)
+    # print()
 
-    # This program represents (- (sin (/ 1.0 2.0)) (exp y))
-    prog2 = FunctionNode("-",
-                [FunctionNode("sin",
-                    [FunctionNode("/",
-                        [TerminalNode(1.0),
-                         TerminalNode(2.0)])
-                    ]),
-                 FunctionNode("exp",
-                    [TerminalNode("y")])
-                    ])
+    # new_ind = initialize_individual()
+    # parent2 = initialize_individual()
+    # #
+    # test_cases = make_test_cases()
+    # # print(test_cases)
+    # # print(len(test_cases))
+    # #
+    # # new_ind.evaluate_individual(test_cases)
+    # print(new_ind)
+    # print(parent2)
+    #
+    # child = crossover(new_ind, parent2)
+    # print(child)
 
-    print("prog1:", prog1)
-    print("Depth:", prog1.tree_depth())
-    print()
+    # pretend_pop = [initialize_individual() for _ in range(1000)]
+    # for ind in pretend_pop:
+    #     ind.evaluate_individual(test_cases)
+    #
+    # winner = tournament_selection(pretend_pop, 1000)
+    #
+    # print(winner)
 
-    assignments = {"x": 7.0, "y": 9.0}
-
-    print("prog1({}) = {}".format(assignments, prog1.eval(assignments)))
-    print("prog2({}) = {}".format(assignments, prog2.eval(assignments)))
-
-    print("\n--------- Making individuals ----------")
-
-    ind1 = Individual(prog1)
-    print(ind1)
-    print()
-
-    ind2 = Individual(prog2)
-    print(ind2)
-    print()
-
-
+    best = gp()
+    print("The best individual we found is:")
+    print(best)
 
 if __name__ == "__main__":
     main()
